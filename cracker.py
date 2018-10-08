@@ -22,10 +22,10 @@ else:
 # asks for wireless card to apply monitor mode on it
 wireless_card = input("Enter your wireless card: ")
 
-airmonkill = "airmon-ng check kill"
-subprocess.call(airmonkill)
-airmonstart = "airmon-ng start "+wireless_card
-subprocess.call(airmonstart)
+#airmonkill = "airmon-ng check kill"
+subprocess.call(["airmon-ng","check", "kill"])
+#airmonstart = "airmon-ng start "+wireless_card
+subprocess.call(["airmon-ng", "start", wireless_card])
 wireless_card = wireless_card+"mon"
 
 csvpath = fullPath+"/"+directory_name
